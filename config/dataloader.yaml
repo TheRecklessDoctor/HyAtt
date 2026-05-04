@@ -1,0 +1,30 @@
+transform:
+  _target_: torchvision.transforms.Compose
+  transforms:
+    - _target_: src.data.augmentation.RandomFlipRotate
+      app_prob: 1.0
+    - _target_: src.data.augmentation.RandomRotate 
+      app_prob: 1.0
+    - _target_: src.data.augmentation.WeightCrop
+      output_size: 
+        - 80
+        - 80
+        - 80
+    - _target_: src.data.augmentation.ToTensor
+    - _target_: src.data.augmentation.RandomNoiseClass
+      app_prob: 1.0
+
+dataset:
+  train_data: "/home/dayan/Documents/PhD/Objective_1/data/processed"
+  test_data: "/home/dayan/Documents/PhD/Objective_1/data/processed_test"
+  isles_2022_train: "/home/dayan/Documents/PhD/Objective_1/data/isles_2022_train"
+  isles_2022_test: "/home/dayan/Documents/PhD/Objective_1/data/isles_2022_test"
+  name: "isles-22"
+
+dataloader:
+  _target_: "torch.utils.data.DataLoader"
+  pin_memory: True
+  num_workers: 6
+  batch_size: 2
+
+
