@@ -6,37 +6,6 @@ from typing import Optional
 # from timm.models.layers import trunc_normal_, DropPath
 # import torch.nn.functional as F
 
-# def conv_layer(
-#         n_filters_in:int, 
-#         n_filters_out:int, 
-#         kernel_size:int, 
-#         padding:int,
-#         normalisation:nn.Module, 
-#         act:nn.Module
-# ):
-
-#         ops = []
-#         ops.append(nn.Conv3d(n_filters_in, n_filters_out, kernel_size, padding=padding, bias=False))
-#         conv = nn.Sequential(*ops)
-
-#         return conv
-
-
-# def deconv_layer(
-#         n_filters_in:int, 
-#         n_filters_out:int, 
-#         kernel_size:int, 
-#         padding:int,
-#         normalisation:nn.Module, 
-#         act:nn.Module
-# ):
-
-#         ops = []
-#         ops.append(nn.ConvTranspose3d(n_filters_in, n_filters_out, kernel_size, padding=padding, bias=False))
-#         conv = nn.Sequential(*ops)
-
-#         return conv
-
 class FFN(nn.Module):
 
         def __init__(
@@ -118,7 +87,7 @@ class Interactor(nn.Module):
                 # cross-attention
                 # Might have used wrong query. Test with self.with_pos_embedding(tgt, query_pos)
                 tgt2 = self.cross_attention(
-                        query = q,
+                        query = self.with_pos_embdedding(tgt, query_pos),
                         key = self.with_pos_embdedding(memory, pos),
                         value = memory, 
                         attn_mask = None,

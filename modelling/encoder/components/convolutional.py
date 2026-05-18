@@ -18,11 +18,11 @@ class ResNetBlock(nn.Module):
         self.conv_layer_1 = nn.Conv3d(n_filters_in, n_filters_out, 3, padding=padding, stride=1)
         self.conv_layer_2 = nn.Conv3d(n_filters_in, n_filters_out, 3, padding=padding, stride=1)
 
-        self.norm_layer_1 = nn.BatchNorm3d(n_filters_out)
-        self.norm_layer_2 = nn.BatchNorm3d(n_filters_out)
+        self.norm_layer_1 = nn.InstanceNorm3d(n_filters_out)
+        self.norm_layer_2 = nn.InstanceNorm3d(n_filters_out)
 
-        self.activation_1 = nn.ReLU(inplace=False)
-        self.activation_2 = nn.ReLU(inplace=False)
+        self.activation_1 = nn.SiLU(inplace=False)
+        self.activation_2 = nn.SiLU(inplace=False)
 
 
     def forward(self, x):

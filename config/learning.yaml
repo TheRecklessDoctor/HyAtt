@@ -1,11 +1,15 @@
 learning_params:
+  # optimizer: 
+  #   _target_: torch.optim.SGD
+  #   lr: 1e-2
+  #   weight_decay: 3e-5
+  #   momentum: 0.99
   optimizer: 
-    _target_: torch.optim.AdamW
-    lr: 2e-4
-    # lr: 0.01
-    weight_decay: 1e-5
-    betas: [0.99, 0.999]
-
+   _target_: torch.optim.AdamW
+   lr: 2e-4
+  #  lr: 0.01
+   weight_decay: 3e-5
+   betas: [0.99, 0.999]
   use_warmup: False 
   use_lr_scheduler: True
   scheduler:
@@ -30,8 +34,8 @@ learning_params:
     empty_cache: 50
     patch_size: 80
     model_name: "BriAtt-Encoder"
-    n_epochs: 500
-    experiment_num: 9
+    n_epochs: 1000
+    experiment_num: 21
     val_at_iter: 58
     seed: 456
     device: "cuda"

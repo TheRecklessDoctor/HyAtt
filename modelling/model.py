@@ -51,14 +51,14 @@ class Model(nn.Module):
 
         self.print_size(printS=self.printS, section="bottleneck", a=latent)
 
-        prediction = self.decoder(
+        prediction, head2, head3 = self.decoder(
             latent,
             [enc_a, enc_b]
         )
 
         self.print_size(printS=self.printS, section="decoder", a=prediction)
 
-        return [prediction, latent]
+        return [prediction, head2, head3]
     
 
 

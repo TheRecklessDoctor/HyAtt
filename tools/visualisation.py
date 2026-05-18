@@ -66,6 +66,6 @@ class Visualiser():
 if __name__ == "__main__":
 
     visu = Visualiser(experiment_num=7)
-    visu.plot_loss_curve("metrics/lossValues/021_BriAtt-Encoder_train.jsonl")
-    visu.plot_validation_curve("metrics/validation/021_BriAtt-Encoder_train.jsonl")
+    visu.plot_loss_curve("metrics/lossValues/019_BriAtt-Encoder_train.jsonl")
+    visu.plot_validation_curve("metrics/validation/019_BriAtt-Encoder_train.jsonl")
     # visu.plot_validation_curve("src/outputs/validation/003_BriAtt-Encoder.jsonl")

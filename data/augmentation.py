@@ -3,28 +3,21 @@ from typing import override, Dict
 import torch
 import numpy as np
 from scipy import ndimage
-from torchio import RandomNoise
+from monai.transforms import RandGaussianNoise, RandGaussianSmooth, RandScaleIntensity, RandShiftIntensity
 
 
 class RandomRotate():
 
-    def __init__(
-            self,
-            app_prob: float
-        ):
-        self.app_prob = app_prob
-
     def _transform(self, image, angle):
         return ndimage.rotate(image, angle, order=0, reshape=False)
         
-    @override
     def __call__(self, sample):
         # print(sample)
         res = {}
         angle = np.random.randint(-20, 20)
         for key, value in sample.items():
             if isinstance(value, str):
-                res[key] = value
+                continue
             else:
                 res[key] = self._transform(value, angle)
         return res
@@ -32,32 +25,24 @@ class RandomRotate():
 
 class ToTensor():
 
-    @override
     def _transform(self, image, is_label= False):
         
         if is_label:
-            # image = image.copy()  # to avoid negative strides
-            # image = np.round(image).astype(np.uint8)  # force to {0,1,...}
             return torch.from_numpy(image).long()
         else:
             image = image.reshape(1, image.shape[0], image.shape[1], image.shape[2]).astype(np.float32)
             return torch.from_numpy(image)
     
-    @override
     def __call__(self, sample):
 
         res = {}
-        # print(sample)
         for key, value in sample.items():
             if isinstance(value, str):
-                res[key] = value
+                continue
             elif key == "label":
                 res[key] = self._transform(value, is_label=True)
-                # if (res[key] < 0).any():
-                #     print("BAD LABEL VALUES toTensor:", torch.unique(res[key]))
             else:
                 res[key] = self._transform(value, is_label=False)
-        
         
         return res
 
@@ -68,55 +53,108 @@ class RandomNoiseClass():
         if is_label:
             return image
         else:
-            add_noise = RandomNoise()
+            add_noise = RandGaussianNoise(prob=1.0)
             return add_noise(image)
    
-    @override
     def __call__(self, sample):
 
         res = {}
         # print(sample)
         for key, value in sample.items():
             if isinstance(value, str):
-                res[key] = value
+                 continue
             elif key == "label":
                 res[key] = self._transform(value, is_label=True)
-                if (res[key] < 0).any():
-                    print("BAD LABEL VALUES toTensor:", torch.unique(res[key]))
+            else:
+                res[key] = self._transform(value, is_label=False)  
+      
+        return res
+
+class RandomSmoothingClass():
+
+    def _transform(self, image, is_label: bool = False):  
+
+        if is_label:
+            return image
+        else:
+            smooth = RandGaussianSmooth(prob=0.5)
+            return smooth(image)
+   
+    def __call__(self, sample):
+
+        res = {}
+        # print(sample)
+        for key, value in sample.items():
+            if isinstance(value, str):
+                continue
+            elif key == "label":
+                res[key] = self._transform(value, is_label=True)
             else:
                 res[key] = self._transform(value, is_label=False)
        
       
         return res
 
+class RandomIntensityShiftClass():
 
+    def _transform(self, image, is_label: bool = False):  
+
+        if is_label:
+            return image
+        else:
+            shift_intensity = RandShiftIntensity(offsets=(5,5), prob=0.3)
+            return shift_intensity(image)
+   
+    def __call__(self, sample):
+
+        res = {}
+        # print(sample)
+        for key, value in sample.items():
+            if isinstance(value, str):
+                continue
+            elif key == "label":
+                res[key] = self._transform(value, is_label=True)
+            else:
+                res[key] = self._transform(value, is_label=False)
+      
+        return res
+    
+class RandomIntensityScaleClass():
+
+    def _transform(self, image, is_label: bool = False):  
+
+        if is_label:
+            return image
+        else:
+            scale_intensity = RandScaleIntensity(factors=(5,5), prob=0.3)
+            return scale_intensity(image)
+   
+    def __call__(self, sample):
+
+        res = {}
+        # print(sample)
+        for key, value in sample.items():
+            if isinstance(value, str):
+               continue 
+            elif key == "label":
+                res[key] = self._transform(value, is_label=True)
+            else:
+                res[key] = self._transform(value, is_label=False)
+       
+        return res
         
 
 class WeightCrop():
 
-    """
-    This transformation has to be done always in the augmentation pipeline however
-    (cont) the output size can be experimented with for ablation study purposes. 
-
-    Limitations:
-    If the crop center is at the edge of a lesion, then the crop itself consist of mostly background
-    and little foreground. Better cropping strategies have to be explored.
-    """
-
     def __init__(self, 
-                 output_size: int | tuple[int, int, int],
-                 app_prob: float = 1.0,
+                 output_size: tuple[int, int, int],
                  dataset = "isles-24"
                 ):
 
         self._output_size = [int(val) for val in output_size]
-        self.app_prob = app_prob
         self.dataset = dataset
 
-    @override
-    def _transform(self, 
-                   image:Dict
-                ):
+    def _transform(self, image:Dict):
         
         dwi, adc, label = image["dwi"], image["adc"], image["label"]
 
@@ -179,11 +217,9 @@ class WeightCrop():
             assert(list(label.shape) == list(self._output_size))
             # assert(label.sum() > 0)
 
-
         return {'dwi':dwi, 'adc':adc, 'label': label}
     
     
-    @override
     def __call__(self, 
                  sample: Dict
                 ):
@@ -192,7 +228,7 @@ class WeightCrop():
         to_transform = {}
         for key, value in sample.items():
             if isinstance(value, str):
-                res[key] = value
+               continue 
             else:
                 to_transform[key] = value
         to_transform = self._transform(to_transform)
@@ -205,40 +241,20 @@ class WeightCrop():
 
 
 class RandomFlipRotate():
-
-    """Rotates the image by 90 degrees and then flips an axis randomly."""
-
-    def __init__(
-            self,
-            app_prob: float
-        ):
-        self.app_prob = app_prob
-
     
-    @override
-    def _transform(
-        self,
-        image
-    ):
+    def _transform(self,image):
         res = {}
-        if np.random.rand() < self.app_prob:
-            k = np.random.randint(0, 4)
-            for key, value in image.items():
-                if key == "file_path":
-                    continue
-                res[key] = np.rot90(value, k)
-                # axis = np.random.randint(0, 2)
-                arr = np.flip(res[key], (0, 1, 2)).copy()
-                res[key] = arr
-            return res
-        else:
-            return image
+        k = np.random.randint(0, 4)
+        for key, value in image.items():
+            if key == "file_path":
+                continue
+            res[key] = np.rot90(value, k)
+            # axis = np.random.randint(0, 2)
+            arr = np.flip(res[key], (0, 1, 2)).copy()
+            res[key] = arr
+        return res
         
-    @override
-    def __call__(
-        self, 
-        sample
-    ):
+    def __call__(self, sample):
         res = {}
         res = self._transform(sample)
         return res

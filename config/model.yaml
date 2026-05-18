@@ -66,10 +66,10 @@ bridger_block_single:
 
 dualEncoder:
   _target_: src.modelling.encoder.dual_encoder.DualEncoder
-  bridger_at_stages: [0, 1, 2]
-  # bridger_at_stages: []
+  # bridger_at_stages: [0, 1, 2]
+  bridger_at_stages: []
   num_blocks: ${global_vals.num_blocks_default}
-  n_filters_in_initial: 1
+  n_filters_in_initial: 2
   n_filters_out_initial: ${global_vals.n_filters_out_ini}
   initial_bridger_embedding: 32
   initial_bridger_feedforward_embedding: 64

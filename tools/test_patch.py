@@ -12,7 +12,9 @@ from tqdm import tqdm
 from skimage.measure import label
 from skimage.morphology import remove_small_holes
 import numpy as np
-import cc3d
+
+
+from .metrics import compute_absolute_lesion_difference, compute_lesion_f1_score
 
 
 
@@ -57,7 +59,7 @@ def var_all_case(
     ) -> tuple[float, np.floating[Any]]:
 
     
-    validation_file = "validation.list" if dataset_name == "isles-24" else "test_validation.list"
+    validation_file = "validation.list" if dataset_name == "isles-24" else "validation_22.list"
     total_dice = 0.0
     with open(f"src/tools/{validation_file}", 'r') as f:
         image_list = f.readlines()
@@ -71,7 +73,7 @@ def var_all_case(
         h5f = h5py.File(img_path, 'r')
         dwi, adc, label = h5f["dwi"][:], h5f["adc"][:], h5f["label"][:]
         # print("Label unique:", torch.unique(torch.from_numpy(label.astype(np.int32))))
-        prediction_sub, _ = test_single_case_all(model, dwi, dwi, stride_xy, stride_z, patch_size, num_classes=num_classes)
+        prediction_sub, _ = test_single_case_all(model, dwi, adc, stride_xy, stride_z, patch_size, num_classes=num_classes)
         print("prediction_sub unique:", torch.unique(torch.from_numpy(prediction_sub)))
         if np.sum(prediction_sub)==0:
             dice = 0
@@ -127,7 +129,7 @@ def test_all_case(
         if preproc_fn is not None:
             image = preproc_fn(image)
 
-        prediction, _= test_single_case_all(model, dwi, dwi, stride_xy, stride_z, patch_size, num_classes=num_classes)
+        prediction, _= test_single_case_all(model, dwi, adc, stride_xy, stride_z, patch_size, num_classes=num_classes)
        
         if nms:
             prediction = getLargestCC(prediction)
@@ -224,21 +226,21 @@ def test_single_case_all(
                 zs = min(stride_z * z, dd-patch_size[2])
                 test_patch_1 = image_1[xs:xs+patch_size[0], ys:ys+patch_size[1], zs:zs+patch_size[2]]
                 test_patch_1 = np.expand_dims(np.expand_dims(test_patch_1,axis=0),axis=0).astype(np.float32)
-                test_patch_1 = torch.from_numpy(test_patch_1).cuda()
-                # test_patch_1 = torch.from_numpy(test_patch_1)
+                # test_patch_1 = torch.from_numpy(test_patch_1).cuda()
+                test_patch_1 = torch.from_numpy(test_patch_1)
                 test_patch_2 = image_2[xs:xs+patch_size[0], ys:ys+patch_size[1], zs:zs+patch_size[2]]
                 test_patch_2 = np.expand_dims(np.expand_dims(test_patch_2,axis=0),axis=0).astype(np.float32)
-                test_patch_2 = torch.from_numpy(test_patch_2).cuda()
-                # test_patch_2 = torch.from_numpy(test_patch_2)
+                # test_patch_2 = torch.from_numpy(test_patch_2).cuda()
+                test_patch_2 = torch.from_numpy(test_patch_2)
                 
-                # input = torch.cat([test_patch_1, test_patch_2], dim=1)
-                # input = input.cuda()
+                input = torch.cat([test_patch_1, test_patch_2], dim=1)
+                input = input.cuda()
                 # input = test_patch_1.cuda()
 
                 #inference
                 with torch.amp.autocast(device_type="cuda"), torch.no_grad():
-                    y1, _ = model(test_patch_1, test_patch_2)
-                    # y1 = model(input)
+                    # y1, _, _ = model(test_patch_1, test_patch_2)
+                    y1,_,_ = model(input, input)
                     y1 = F.softmax(y1, dim=1)
                     # print("logits: ", y1.min(), y1.max(), y1.mean())
                 y1 = y1.cpu().detach().numpy()
@@ -260,151 +262,8 @@ def test_single_case_all(
     return label_map_1, score_map_1
 
 
-def compute_lesion_f1_score(ground_truth, prediction, empty_value=1.0, connectivity=26):
-    """
-    Computes the lesion-wise F1-score between two masks.
-
-    Parameters
-    ----------
-    ground_truth : array-like, bool
-        Any array of arbitrary size. If not boolean, will be converted.
-    prediction : array-like, bool
-        Any other array of identical size as 'ground_truth'. If not boolean, it will be converted.
-    empty_value : scalar, float.
-    connectivity : scalar, int.
-
-    Returns
-    -------
-    f1_score : float
-        Lesion-wise F1-score as float.
-        Max score = 1
-        Min score = 0
-        If both images are empty (tp + fp + fn =0) = empty_value
-
-    Notes
-    -----
-    This function computes lesion-wise score by defining true positive lesions (tp), false positive lesions (fp) and
-    false negative lesions (fn) using 3D connected-component-analysis.
-
-    tp: 3D connected-component from the ground-truth image that overlaps at least on one voxel with the prediction image.
-    fp: 3D connected-component from the prediction image that has no voxel overlapping with the ground-truth image.
-    fn: 3d connected-component from the ground-truth image that has no voxel overlapping with the prediction image.
-    """
-    ground_truth = np.asarray(ground_truth).astype(np.bool)
-    prediction = np.asarray(prediction).astype(np.bool)
-    tp = 0
-    fp = 0
-    fn = 0
-
-    # Check if ground-truth connected-components are detected or missed (tp and fn respectively).
-    intersection = np.logical_and(ground_truth, prediction)
-    labeled_ground_truth, N = cc3d.connected_components(
-        ground_truth, connectivity=connectivity, return_N=True
-    )
-
-    # Iterate over ground_truth clusters to find tp and fn.
-    # tp and fn are only computed if the ground-truth is not empty.
-    if N > 0:
-        for _, binary_cluster_image in cc3d.each(labeled_ground_truth, binary=True, in_place=True):
-            if np.logical_and(binary_cluster_image, intersection).any():
-                tp += 1
-            else:
-                fn += 1
-
-    # iterate over prediction clusters to find fp.
-    # fp are only computed if the prediction image is not empty.
-    labeled_prediction, N = cc3d.connected_components(
-        prediction, connectivity=connectivity, return_N=True
-    )
-    if N > 0:
-        for _, binary_cluster_image in cc3d.each(labeled_prediction, binary=True, in_place=True):
-            if not np.logical_and(binary_cluster_image, ground_truth).any():
-                fp += 1
-
-    # Define case when both images are empty.
-    if tp + fp + fn == 0:
-        _, N = cc3d.connected_components(ground_truth, connectivity=connectivity, return_N=True)
-        if N == 0:
-            f1_score = empty_value
-    else:
-        f1_score = tp / (tp + (fp + fn) / 2)
-
-    return f1_score
-
-def compute_absolute_volume_difference(im1, im2, voxel_size):
-    """
-    Computes the absolute volume difference between two masks.
-
-    Parameters
-    ----------
-    im1 : array-like, bool
-        Any array of arbitrary size. If not boolean, will be converted.
-    im2 : array-like, bool
-        Any other array of identical size as 'ground_truth'. If not boolean, it will be converted.
-    voxel_size : scalar, float (ml)
-        If not float, it will be converted.
-
-    Returns
-    -------
-    abs_vol_diff : float, measured in ml.
-        Absolute volume difference as a float.
-        Maximum similarity = 0
-        No similarity = inf
 
 
-    Notes
-    -----
-    The order of inputs is irrelevant. The result will be identical if `im1` and `im2` are switched.
-    """
-
-    im1 = np.asarray(im1).astype(np.bool)
-    im2 = np.asarray(im2).astype(np.bool)
-    voxel_size = voxel_size.astype(np.float)
-
-    if im1.shape != im2.shape:
-        warnings.warn(
-            "Shape mismatch: ground_truth and prediction have difference shapes."
-            " The absolute volume difference is computed with mismatching shape masks"
-        )
-
-    ground_truth_volume = np.sum(im1) * voxel_size
-    prediction_volume = np.sum(im2) * voxel_size
-    abs_vol_diff = np.abs(ground_truth_volume - prediction_volume)
-
-    return abs_vol_diff
-
-
-def compute_absolute_lesion_difference(ground_truth, prediction, connectivity=26):
-    """
-    Computes the absolute lesion difference between two masks. The number of lesions are counted for
-    each volume, and their absolute difference is computed.
-
-    Parameters
-    ----------
-    ground_truth : array-like, bool
-        Any array of arbitrary size. If not boolean, will be converted.
-    prediction : array-like, bool
-        Any other array of identical size as 'ground_truth'. If not boolean, it will be converted.
-
-    Returns
-    -------
-    abs_les_diff : int
-        Absolute lesion difference as integer.
-        Maximum similarity = 0
-        No similarity = inf
-
-
-    Notes
-    -----
-    """
-    ground_truth = np.asarray(ground_truth).astype(np.bool)
-    prediction = np.asarray(prediction).astype(np.bool)
-
-    _, ground_truth_numb_lesion = cc3d.connected_components(ground_truth, connectivity=connectivity, return_N=True)
-    _, prediction_numb_lesion = cc3d.connected_components(prediction, connectivity=connectivity, return_N=True)
-    abs_les_diff = abs(ground_truth_numb_lesion - prediction_numb_lesion)
-
-    return abs_les_diff
 
 
 def calculate_metric_percase(
@@ -510,11 +369,4 @@ def calculate_metric_percase(
     )
     print(str(logger))
 
-    logger.add_vals(
-        ["dice","F1","ald" ,"pr", "se", "sp"],
-        [dice, f1,ald, precision, se, sp]
-    )
-    print(str(logger))
-
     return dice, jc, hd, asd, assd, precision, se, sp, F1
-    # return dice, f1,ald, precision, se, sp,

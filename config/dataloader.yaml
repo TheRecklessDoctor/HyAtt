@@ -2,17 +2,17 @@ transform:
   _target_: torchvision.transforms.Compose
   transforms:
     - _target_: src.data.augmentation.RandomFlipRotate
-      app_prob: 1.0
     - _target_: src.data.augmentation.RandomRotate 
-      app_prob: 1.0
     - _target_: src.data.augmentation.WeightCrop
       output_size: 
         - 80
         - 80
         - 80
-    - _target_: src.data.augmentation.ToTensor
+    - _target_: src.data.augmentation.RandomSmoothingClass
     - _target_: src.data.augmentation.RandomNoiseClass
-      app_prob: 1.0
+    - _target_: src.data.augmentation.RandomIntensityScaleClass
+    - _target_: src.data.augmentation.RandomIntensityShiftClass
+    - _target_: src.data.augmentation.ToTensor
 
 dataset:
   train_data: "/home/dayan/Documents/PhD/Objective_1/data/processed"

@@ -196,8 +196,8 @@ class Solver:
                 channels=(16, 32, 64),
                 strides=(2, 2, 2),
                 dropout = 0.1,
-                norm='batch',
-                act='ReLU'
+                norm='instance',
+                act='RELU'
             ).to(device)
         elif model_type == 'vnet':
             model = VNet(
@@ -229,19 +229,25 @@ class Solver:
         for _ , sampled_batch in enumerate(dataloader):
             dwi, adc, label = sampled_batch["dwi"], sampled_batch["adc"], sampled_batch["label"]
             
-            # inputs = torch.cat([dwi, dwi], dim=1)
+            inputs = torch.cat([dwi, adc], dim=1)
             
             if device == "cuda":
-                dwi, adc, label = dwi.cuda(), adc.cuda(), label.cuda()
-                # inputs, label = inputs.cuda(), label.cuda()
+                # dwi, adc, label = dwi.cuda(), adc.cuda(), label.cuda()
+                inputs, label = inputs.cuda(), label.cuda()
 
             self.model.train()
             
             with autocast(device_type="cuda", dtype=torch.float32):
 
-                pred_outputs, _ = self.model(dwi, dwi)
+                # pred_outputs, _ = self.model(dwi, adc)
+                pred_outputs, head2, head3 = self.model(inputs, inputs)
+               #head2_out = F.interpolate(head2, size=(80,80,80), mode="nearest")
+               # head3_out = F.interpolate(head3, size=(80,80,80), mode="nearest")
+
                 # pred_outputs = self.model(inputs)
                 pred_segmentation = F.softmax(pred_outputs, dim=1)
+               # head2_seg = F.softmax(head2_out, dim=1)
+               # head3_seg = F.softmax(head3_out, dim=1)
                 
                 lesions = label[:self.batch_size, ...]
                 # print(f"Predicted min/max: {pred_segmentation.min().item()} / {pred_segmentation.max().item()}")
@@ -250,12 +256,24 @@ class Solver:
                 dice_loss = diceLoss(lesions == 1, pred_segmentation[:self.batch_size, 1,...])
                 ce_loss  = F.cross_entropy(pred_outputs[:self.batch_size, ...], lesions)
 
+                # deep supervision losses
+               # dice_loss_h2 = diceLoss(lesions == 1, head2_seg[:self.batch_size, 1,...])
+               # ce_loss_h2  = F.cross_entropy(head2_out[:self.batch_size, ...], lesions)
+               # loss_h2 = self.loss_hyperparams.alpha*dice_loss_h2 + self.loss_hyperparams.beta*ce_loss_h2
+
+               # dice_loss_h3 = diceLoss(lesions == 1, head3_seg[:self.batch_size, 1,...])
+               # ce_loss_h3  = F.cross_entropy(head3_out[:self.batch_size, ...], lesions)
+               # loss_h3 = self.loss_hyperparams.alpha*dice_loss_h3 + self.loss_hyperparams.beta*ce_loss_h3
+
                 assert label.dtype == torch.long, f"Expected torch.long but got {label.dtype}"
                 assert lesions.dtype == torch.long, f"Expected torch.long for lesions but got {label.dtype}"
                 assert label.min() >= 0, f"Label has negative values: {label.min()}"
                 assert label.max() <= 1, f"Label has value ≥ num_classes: {label.max()} >= {2}"
 
-                loss_val = self.loss_hyperparams.alpha*dice_loss + self.loss_hyperparams.beta*ce_loss
+                loss_h1 = self.loss_hyperparams.alpha*dice_loss + self.loss_hyperparams.beta*ce_loss
+                loss_val = loss_h1
+
+               # loss_val = 0.5*loss_h1 + 0.25*loss_h2 + 0.125*loss_h3
 
 
             optimizer.zero_grad()
@@ -484,15 +502,15 @@ class Solver:
         )
 
 
-        saver = SaveVals(f"metrics/test/{self._experiment_num}_{self._model_name}_{model_type}.jsonl")
+        saver = SaveVals(f"metrics/test/{self._experiment_num}_{self._model_name}.jsonl")
         saver.add_vals(
-            ["dice", "jc", "hd", "asd", "assd", "precision", "se", "sp", "F1"],
+            ["dice", "jc", "hd", "asd", "assd", "precision", "se", "sp"],
             avg_metric
         )
         saver.save()
 
         saver.add_vals(
-            ["med_dice", "med_jc", "med_hd", "med_asd", "med_assd", "med_precision", "med_se", "med_sp", "med_F1"],
+            ["med_dice", "med_jc", "med_hd", "med_asd", "med_assd", "med_precision", "med_se", "med_sp"],
             median_metric
         )
 
@@ -512,18 +530,10 @@ class Solver:
 
         # saver.save()
 
-        saver_2 = SaveVals(f"metrics/test/{self._experiment_num}_{self._model_name}_isles22_individual_metrics.jsonl")
+        saver_2 = SaveVals(f"metrics/test/{self._experiment_num}_isles22_individual_metrics.jsonl")
         for i in individual_metrics:
             saver_2.add_vals(
-                ["dice", "jc", "hd", "asd", "assd", "precision", "se", "sp", "F1"],
-                i
-            )
-            saver_2.save()
-
-        saver_2 = SaveVals(f"metrics/test/{self._experiment_num}_{self._model_name}_isles22_individual_metrics.jsonl")
-        for i in individual_metrics:
-            saver_2.add_vals(
-                ["dice", "f1", "ald", "assd", "precision", "se", "sp"],
+                ["dice", "jc", "hd", "asd", "assd", "precision", "se", "sp"],
                 i
             )
             saver_2.save()
@@ -547,13 +557,13 @@ class Solver:
         torch.autograd.profiler.profile(False)
 
         print("*****Starting Training*****")
-        # checkpoint_path = "checkpoints/training/experiment_8/BriAtt-Encoder_iter:43500_train.pth"
-        self.train("train")
+        #checkpoint_path = "checkpoints/training/experiment_21/BriAtt-Encoder_iter:43500_train.pth"
+        # self.train("train")
 
         print("*****Starting Testing*****")
-        # path = "checkpoints/best_checkpoints/experiment_8/BriAtt-Encoder_best_model_train.pth"
+        path = "checkpoints/best_checkpoints/experiment_19/BriAtt-Encoder_best_model_train.pth"
         # print(self.save_model_path)
-        self.test(pre_trained_path=self.save_model_path)
+        self.test(pre_trained_path=path)
 
         print("*****Training and Testing Complete*****")
 

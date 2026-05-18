@@ -9,8 +9,9 @@ from omegaconf import DictConfig
 # from monai.networks.blocks.transformerblock import TransformerBlock
 # import torch.nn.functional as F
 
-from .components.convolutional import MultiscaleConvBlock, DownsamplingBlock
+from .components.convolutional import MultiscaleConvBlock, DownsamplingBlock, ResNetBlock
 from .components.bridger import Bridger, SinglePathBridger
+from .components.mogablock import MogaBlock
 
 class SpatialToSequenceProjector(nn.Module):
     def __init__(
@@ -156,6 +157,12 @@ class DualPathEncoderStage(nn.Module):
                 n_filters_out, 
                 1
             )
+        # else:
+        #     self.merge = nn.Conv3d(
+        #         in_channels = n_filters_out*2,
+        #         out_channels = n_filters_out,
+        #         kernel_size=1
+        #     )
         
         self.dropout = nn.Dropout(0.1, inplace=False)
         self._print_sizes = print_sizes
@@ -189,6 +196,11 @@ class DualPathEncoderStage(nn.Module):
         
 
         if not self.use_bridger:
+            # concat = torch.concat([feat_a_down, feat_b_down], dim=1)
+            # concat = self.merge(concat)
+
+            # feat_a_down = feat_a_down + concat
+            # feat_b_down = feat_b_down + concat
             return [feat_a_down, feat_b_down]
         
 
@@ -399,18 +411,26 @@ class SinglePathEncoderStage(nn.Module):
             self, 
             n_filters_in: int,
             n_filters_out: int,
-            print_sizes: bool,
+            print_sizes: bool
     ):
         super().__init__()
 
-        self.conv_a = MultiscaleConvBlock(
-            n_filters_in=n_filters_in, 
-            n_filters_out=n_filters_in, 
+        # self.conv_a = MultiscaleConvBlock(
+        #     n_filters_in=n_filters_in, 
+        #     n_filters_out=n_filters_in, 
+        #     padding=1
+        # )
+        # self.conv_a = MogaBlock(
+        #     embed_dims=n_filters_in
+        # )
+        self.conv_a = ResNetBlock(
+            n_filters_in=n_filters_in,
+            n_filters_out=n_filters_in,
             padding=1
         )
 
         self.down_a = DownsamplingBlock(
-            n_filters_in=2*n_filters_in, 
+            n_filters_in=n_filters_in, 
             n_filters_out=n_filters_out, 
             stride=2, 
             padding=0
@@ -427,17 +447,6 @@ class SinglePathEncoderStage(nn.Module):
         if self._print_sizes:
             print(f"{stage} A: {act_a.shape}, B: {act_b.shape}")
     
-    def _to_spatial(self, x, img_size: tuple[int, int, int], patch_size:tuple[int, int, int]):
-
-        B, N, Hid = x.shape
-        feat_size = tuple(im // ps for im, ps in zip(img_size, patch_size))
-        D_patch, H_patch, W_patch = feat_size
-
-        x = x.view(B, D_patch, H_patch, W_patch, Hid)
-        x = x.permute(0, 4, 1, 2, 3).contiguous()
-
-        return x
-    
 
     def forward(
             self, 
@@ -445,9 +454,7 @@ class SinglePathEncoderStage(nn.Module):
     ) -> list[torch.Tensor]:
         
         feat_a = self.conv_a(a)
-
         feat_a_down = self.down_a(feat_a)
-
 
         self._print_shapes(feat_a_down, feat_a_down, "after downsampling")
         
@@ -480,56 +487,56 @@ class DualEncoder(nn.Module):
         self.image_size = (80, 80, 80)
         # This was required to use patch embedding from Monai
 
-        
         # Create encoder stages
         self.stages = nn.ModuleList()
         for i in range(num_blocks):
-            use_bridger = True if i in self.bridger_at_stages else False
-            # self.bridger = bridger if use_bridger else None
-            # This was required to use the patch embedding block from Monai
+            # use_bridger = True if i in self.bridger_at_stages else False
+            # # self.bridger = bridger if use_bridger else None
+            # # This was required to use the patch embedding block from Monai
 
-            if use_bridger:
+            # if use_bridger:
 
-                # stage = DualPathEncoderStage(
-                #     n_filters_in,
-                #     n_filters_out,
-                #     bridger_embedding,
-                #     initial_bridger_feedforward_embedding,
-                #     print_sizes[i],
-                #     use_bridger
-                # )
+            #     stage = DualPathEncoderStage(
+            #         n_filters_in,
+            #         n_filters_out,
+            #         bridger_embedding,
+            #         initial_bridger_feedforward_embedding,
+            #         print_sizes[i],
+            #         use_bridger
+            #     )
 
-                stage = DualEncoderStageWithSinglePathBridger(
-                    n_filters_in,
-                    n_filters_out,
-                    bridger_embedding,
-                    bridger_feedforward_embedding,
-                    print_sizes[i],
-                    use_bridger
-                )
-            else:
-                stage = DualPathEncoderStage(
-                    n_filters_in,
-                    n_filters_out,
-                    bridger_embedding,
-                    initial_bridger_feedforward_embedding,
-                    print_sizes[i]
-                )
+            #     # stage = DualEncoderStageWithSinglePathBridger(
+            #     #     n_filters_in,
+            #     #     n_filters_out,
+            #     #     bridger_embedding,
+            #     #     bridger_feedforward_embedding,
+            #     #     print_sizes[i],
+            #     #     use_bridger
+            #     # )
+            # else:
+            #     stage = DualPathEncoderStage(
+            #         n_filters_in,
+            #         n_filters_out,
+            #         bridger_embedding,
+            #         initial_bridger_feedforward_embedding,
+            #         print_sizes[i],
+            #         use_bridger
+            #     )
 
-                # stage = DualEncoderStageWithSinglePathBridger(
-                #     n_filters_in,
-                #     n_filters_out,
-                #     bridger_embedding,
-                #     bridger_feedforward_embedding,
-                #     print_sizes[i],
-                #     use_bridger
-                # )
+            #     # stage = DualEncoderStageWithSinglePathBridger(
+            #     #     n_filters_in,
+            #     #     n_filters_out,
+            #     #     bridger_embedding,
+            #     #     bridger_feedforward_embedding,
+            #     #     print_sizes[i],
+            #     #     use_bridger
+            #     # )
 
-            # stage = SinglePathEncoderStage(
-            #     n_filters_in,
-            #     n_filters_out,
-            #     print_sizes[i]
-            # )
+            stage = SinglePathEncoderStage(
+                n_filters_in,
+                n_filters_out,
+                print_sizes[i]
+            )         
 
             self.stages.append(stage)
 
@@ -569,7 +576,7 @@ class DualEncoder(nn.Module):
     def forward(
             self, 
             x_a: torch.Tensor, 
-            x_b: torch.Tensor
+            x_b: torch.Tensor = None
     ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
 
         features_a = []
@@ -577,18 +584,18 @@ class DualEncoder(nn.Module):
         
         for i, stage in enumerate(self.stages):
 
-            x_a, x_b = stage(x_a, x_b)
-            # x_a = stage(x_a)
+            # x_a, x_b = stage(x_a, x_b)
+            x_a = stage(x_a)
 
             features_a.append(x_a)
-            features_b.append(x_b)
+            # features_b.append(x_b)
 
   
-            self._print_shapes(x_a, x_b, f"End stage {i}", self._print_sizes[i])
-            # self._print_shapes(x_a, x_a, f"End stage {i}", self._print_sizes[i])
+            # self._print_shapes(x_a, x_b, f"End stage {i}", self._print_sizes[i])
+            self._print_shapes(x_a, x_a, f"End stage {i}", self._print_sizes[i])
 
-        return features_a, features_b
-        # return features_a, features_a
+        # return features_a, features_b
+        return features_a, features_a
 
 
 
