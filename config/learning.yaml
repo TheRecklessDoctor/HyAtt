@@ -32,10 +32,10 @@ learning_params:
 
   experiment_var:
     empty_cache: 50
-    patch_size: 80
+    patch_size: 64
     model_name: "BriAtt-Encoder"
-    n_epochs: 1000
-    experiment_num: 21
+    n_epochs: 500
+    experiment_num: 0
     val_at_iter: 58
     seed: 456
     device: "cuda"

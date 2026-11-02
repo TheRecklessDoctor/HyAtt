@@ -51,7 +51,7 @@ class GenericDataSet(Dataset):
         subject_path = self.image_list[index]
         subject_name = subject_path.split("/")[-1]
         image_path = subject_path + "/" + f"{subject_name}_norm.h5" 
-        #image_path = subject_path + "/" + f"{subject_name}.h5"
+        # image_path = subject_path + "/" + f"{subject_name}.h5"
 
         h5f = h5py.File(image_path, 'r')
 
@@ -60,10 +60,10 @@ class GenericDataSet(Dataset):
         label = h5f["label"][:]
         h5_path = image_path
 
-        sample = {"dwi": dwi, "adc":adc, "label":label, "file_path": h5_path}
+        sample = {"dwi": dwi, "adc":adc, "label":label}
 
-        if self.mode == "train":
-            sample =  self.transform(sample)
+        # if self.mode == "train":
+        sample =  self.transform(sample)
         
         return sample
 

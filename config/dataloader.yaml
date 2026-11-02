@@ -5,9 +5,9 @@ transform:
     - _target_: src.data.augmentation.RandomRotate 
     - _target_: src.data.augmentation.WeightCrop
       output_size: 
-        - 80
-        - 80
-        - 80
+        - 96
+        - 96
+        - 96
     - _target_: src.data.augmentation.RandomSmoothingClass
     - _target_: src.data.augmentation.RandomNoiseClass
     - _target_: src.data.augmentation.RandomIntensityScaleClass
@@ -24,7 +24,7 @@ dataset:
 dataloader:
   _target_: "torch.utils.data.DataLoader"
   pin_memory: True
-  num_workers: 6
+  num_workers: 8
   batch_size: 2
 
 

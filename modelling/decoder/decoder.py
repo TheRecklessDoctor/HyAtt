@@ -1,13 +1,11 @@
+from .components.convolutional import ResNetBlock, UpsamplingBlock
+
 import torch 
 from torch import nn
-from hydra.utils import instantiate
 from omegaconf import DictConfig
-import torch.nn.functional as F
 
 class Decoder(nn.Module):
-      def __init__(self, 
-                 conv_block: DictConfig, 
-                 upsample_block: DictConfig,
+      def __init__(self,
                  weight_initialiser:DictConfig,
                  num_blocks:int,
                  n_filters_in: int,
@@ -42,13 +40,21 @@ class Decoder(nn.Module):
 
                 self.blocks.append(
                       nn.Sequential(
-                        conv_block(
+                        ResNetBlock(
                             n_filters_in = self._filters_in, 
-                            n_filters_out = self._filters_in
+                            n_filters_out = self._filters_in,
+                            padding=1
                             ),
-                        upsample_block(
+                        # MogaBlock(
+                        #       embed_dims=self._filters_in
+                        # ),
+                        UpsamplingBlock(
                             n_filters_in = self._filters_in, 
-                            n_filters_out = self.n_filters_upSamp
+                            n_filters_out = self.n_filters_upSamp,
+                            padding=0,
+                            output_padding=0,
+                            stride=2,
+                            mode_upsampling=0
                             )
                       )
                 )
@@ -57,9 +63,6 @@ class Decoder(nn.Module):
                 self._filters_in = self._filters_in // 2
 
             self.out_conv = nn.Conv3d(self.n_filters_upSamp, 2, 1, padding=0)
-            self.head2 = nn.Conv3d(n_filters_in*2, 2, 1, padding=0)
-            self.head3 = nn.Conv3d(n_filters_in, 2, 1, padding=0)
-
 
             self._initialise_weights()
             # self.dropout = nn.Dropout3d(0.5, inplace=False)
@@ -87,29 +90,20 @@ class Decoder(nn.Module):
                   print(f"{stage} Activation: {act.shape}")
     
       def forward(self, x, enc_outputs):
-            num_blocks = len(enc_outputs[0])
-            enc_a, enc_b = enc_outputs[0], enc_outputs[1]
-            deep_sup = []
+            num_blocks = len(enc_outputs)
+            enc_a = enc_outputs
             for i, block in enumerate(self.blocks):
-                  enc_a_out, enc_b_out = enc_a[num_blocks - i - 1], enc_b[num_blocks- i - 1]
+                  enc_a_out = enc_a[num_blocks - i - 1]
                   if self._use_skip_connections:
-                        x = block[0](x) + enc_a_out + enc_b_out
+                        x = block[0](x) + enc_a_out
                         x = block[1](x)
                         
                   else:
                         x = block[0](x)
                         x = block[1](x)
-                  self._print_shapes(x, f"decoder block {i}")
-                  deep_sup.append(x)
-                        
-                  
+                  self._print_shapes(x, f"decoder block {i}")                
                   
             x = self.out_conv(x)
-
-            if self.use_deep_supervision:
-                  out2 = self.head2(deep_sup[0])
-                  out3 = self.head3(deep_sup[1])
-                  return x, out2, out3
             
             self._print_shapes(x, f"decoder end")
             return x

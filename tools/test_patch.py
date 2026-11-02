@@ -52,10 +52,10 @@ def var_all_case(
         num_classes: int, 
         logger:callable,
         iter: int,
-        dataset_name: str = "isles-24",
-        patch_size: Tuple[int, int, int] = (80, 80, 80), 
+        patch_size: Tuple[int, int, int],
+        dataset_name: str = "isles-24", 
         stride_xy: int = 18, 
-        stride_z: int = 4
+        stride_z: int = 4,
     ) -> tuple[float, np.floating[Any]]:
 
     
@@ -74,7 +74,7 @@ def var_all_case(
         dwi, adc, label = h5f["dwi"][:], h5f["adc"][:], h5f["label"][:]
         # print("Label unique:", torch.unique(torch.from_numpy(label.astype(np.int32))))
         prediction_sub, _ = test_single_case_all(model, dwi, adc, stride_xy, stride_z, patch_size, num_classes=num_classes)
-        print("prediction_sub unique:", torch.unique(torch.from_numpy(prediction_sub)))
+        # print("prediction_sub unique:", torch.unique(torch.from_numpy(prediction_sub)))
         if np.sum(prediction_sub)==0:
             dice = 0
         else:
@@ -105,8 +105,8 @@ def test_all_case(
         test_save_path = None, 
         preproc_fn = None, 
         nms: int = 0,
-        experiment_num: int = 0,
-        missing_holes:int = 0
+        missing_holes:int = 0,
+        experiment_name:str=""
     ) -> list:
 
     validation_file = "test.list" if dataset_name == "isles-24" else "test_22.list"
@@ -136,7 +136,7 @@ def test_all_case(
         if missing_holes:
             prediction = remove_small_holes(prediction, area_threshold=20)
         if np.sum(prediction)==0:
-            single_metric = (0,0,0,0,0,0,0,0,0)
+            single_metric = (0,0,0,0)
         else:
             single_metric = calculate_metric_percase(prediction, label[:], logger=logger)
     
@@ -151,10 +151,11 @@ def test_all_case(
         )
 
         print(str(logger))
-        save_image_path = test_save_path + f"/images/experiment_{experiment_num}/"
+        save_image_path = test_save_path + f"/images/{experiment_name}/"
 
         if save_result:
             nib.save(nib.Nifti1Image(prediction.astype(np.float32), np.eye(4)), save_image_path +  "%02d_pred.nii.gz" % ith)
+            nib.save(nib.Nifti1Image(dwi[:].astype(np.float32), np.eye(4)), save_image_path +  "%02d_dwi.nii.gz" % ith)
             nib.save(nib.Nifti1Image(label[:].astype(np.float32), np.eye(4)), save_image_path +  "%02d_gt.nii.gz" % ith)
 
         ith += 1
@@ -163,7 +164,7 @@ def test_all_case(
     median_metrics = np.median(metrics, axis=0)
 
     logger.add_vals(
-        ["dice", "jc", "hd", "asd", "assd", "precision", "se", "sp", "F1"], 
+        ["dice", "hd", "precision","F1"], 
         avg_metric1
     )
     print(str(logger))
@@ -216,6 +217,7 @@ def test_single_case_all(
 
     model.eval()
     
+    
     #patch extraction
     for x in range(0, sx):
         xs = min(stride_xy*x, ww-patch_size[0])
@@ -238,13 +240,15 @@ def test_single_case_all(
                 # input = test_patch_1.cuda()
 
                 #inference
-                with torch.amp.autocast(device_type="cuda"), torch.no_grad():
-                    # y1, _, _ = model(test_patch_1, test_patch_2)
-                    y1,_,_ = model(input, input)
-                    y1 = F.softmax(y1, dim=1)
+                with torch.amp.autocast(device_type="cuda",  dtype=torch.float32), torch.no_grad():
+                    y1 = model(input)
+                    y1 = F.softmax(y1[0], dim=1)
+                    # y1 = F.softmax(y1, dim=1)
                     # print("logits: ", y1.min(), y1.max(), y1.mean())
                 y1 = y1.cpu().detach().numpy()
+                # print(y1.shape)
                 y1 = y1[0,1,:,:,:]
+                # y1 = y1[0,:,:,:]
                 score_map_1[:, xs:xs+patch_size[0], ys:ys+patch_size[1], zs:zs+patch_size[2]] \
                   = score_map_1[:, xs:xs+patch_size[0], ys:ys+patch_size[1], zs:zs+patch_size[2]] + y1
                 
@@ -272,15 +276,13 @@ def calculate_metric_percase(
         logger
     ):
     dice = metric.binary.dc(pred, gt)
-    jc = metric.binary.jc(pred, gt)
+    #jc = metric.binary.jc(pred, gt)
     hd = metric.binary.hd95(pred, gt)
-    asd = metric.binary.asd(pred, gt)
+    #asd = metric.binary.asd(pred, gt)
     assd = metric.binary.assd(pred, gt)
-    # f1 = compute_lesion_f1_score(gt, pred)
-    # ald = compute_absolute_lesion_difference(gt, pred)
     precision = metric.binary.precision(pred, gt)
-    se = metric.binary.sensitivity(pred, gt)
-    sp = metric.binary.specificity(pred, gt)
+    #se = metric.binary.sensitivity(pred, gt)
+    #sp = metric.binary.specificity(pred, gt)
 
     label_gt = label(gt)
     label_gts = np.bincount(label_gt.flat)
@@ -364,9 +366,9 @@ def calculate_metric_percase(
     print(str(logger))
 
     logger.add_vals(
-        ["dice", "jc", "95hd", "asd", "assd", "pr", "se", "sp"],
-        [dice, jc, hd, asd, assd, precision, se, sp]
+        ["dice", "95hd", "pr"], 
+        [dice, hd, precision]
     )
     print(str(logger))
 
-    return dice, jc, hd, asd, assd, precision, se, sp, F1
+    return dice, hd, precision, F1

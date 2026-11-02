@@ -1,4 +1,4 @@
-from typing import override, Dict
+from typing import Dict
 
 import torch
 import numpy as np
@@ -12,14 +12,10 @@ class RandomRotate():
         return ndimage.rotate(image, angle, order=0, reshape=False)
         
     def __call__(self, sample):
-        # print(sample)
         res = {}
         angle = np.random.randint(-20, 20)
         for key, value in sample.items():
-            if isinstance(value, str):
-                continue
-            else:
-                res[key] = self._transform(value, angle)
+            res[key] = self._transform(value, angle)
         return res
 
 
@@ -37,9 +33,7 @@ class ToTensor():
 
         res = {}
         for key, value in sample.items():
-            if isinstance(value, str):
-                continue
-            elif key == "label":
+            if key == "label":
                 res[key] = self._transform(value, is_label=True)
             else:
                 res[key] = self._transform(value, is_label=False)
@@ -61,9 +55,7 @@ class RandomNoiseClass():
         res = {}
         # print(sample)
         for key, value in sample.items():
-            if isinstance(value, str):
-                 continue
-            elif key == "label":
+            if key == "label":
                 res[key] = self._transform(value, is_label=True)
             else:
                 res[key] = self._transform(value, is_label=False)  
@@ -85,9 +77,7 @@ class RandomSmoothingClass():
         res = {}
         # print(sample)
         for key, value in sample.items():
-            if isinstance(value, str):
-                continue
-            elif key == "label":
+            if key == "label":
                 res[key] = self._transform(value, is_label=True)
             else:
                 res[key] = self._transform(value, is_label=False)
@@ -110,9 +100,7 @@ class RandomIntensityShiftClass():
         res = {}
         # print(sample)
         for key, value in sample.items():
-            if isinstance(value, str):
-                continue
-            elif key == "label":
+            if key == "label":
                 res[key] = self._transform(value, is_label=True)
             else:
                 res[key] = self._transform(value, is_label=False)
@@ -134,9 +122,7 @@ class RandomIntensityScaleClass():
         res = {}
         # print(sample)
         for key, value in sample.items():
-            if isinstance(value, str):
-               continue 
-            elif key == "label":
+            if key == "label":
                 res[key] = self._transform(value, is_label=True)
             else:
                 res[key] = self._transform(value, is_label=False)
@@ -226,17 +212,14 @@ class WeightCrop():
 
         res = {}
         to_transform = {}
-        for key, value in sample.items():
-            if isinstance(value, str):
-               continue 
-            else:
-                to_transform[key] = value
-        to_transform = self._transform(to_transform)
+        # for key, value in sample.items():
+        #     to_transform[key] = value
+        to_transform = self._transform(sample)
 
-        for key, value in to_transform.items():
-            res[key] = value
+        # for key, value in to_transform.items():
+        #     res[key] = value
 
-        return res
+        return to_transform
 
 
 
@@ -249,7 +232,6 @@ class RandomFlipRotate():
             if key == "file_path":
                 continue
             res[key] = np.rot90(value, k)
-            # axis = np.random.randint(0, 2)
             arr = np.flip(res[key], (0, 1, 2)).copy()
             res[key] = arr
         return res

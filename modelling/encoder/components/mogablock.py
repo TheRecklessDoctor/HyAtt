@@ -40,6 +40,7 @@ def compute_splits(embed_dims, ratios=(1, 3, 4)):
 
     Works for very small channel counts.
     """
+    #print(f"embed_dims: {embed_dims}")
 
     if embed_dims < 3:
         return [embed_dims, 0, 0]
@@ -54,6 +55,7 @@ def compute_splits(embed_dims, ratios=(1, 3, 4)):
     # distribute remaining channels
     while sum(splits) < embed_dims:
         splits[splits.index(max(splits))] += 1
+    # print(f"splits: {splits}")
 
     return splits
 
@@ -149,12 +151,13 @@ class MultiOrderDWConv(nn.Module):
             self.embed_dims_2
         ) = compute_splits(embed_dims, channel_split)
 
+        # TODO change the kernel sizes to be 5, 5, 7 instead of 3, 3, 3
         # shared DW conv
         self.DW_conv0 = nn.Conv3d(
             embed_dims,
             embed_dims,
-            kernel_size=3,
-            padding=dw_dilation[0],
+            kernel_size=5,
+            padding=(2* dw_dilation[0]),
             dilation=dw_dilation[0],
             groups=embed_dims,
             bias=True
@@ -165,8 +168,8 @@ class MultiOrderDWConv(nn.Module):
             self.DW_conv1 = nn.Conv3d(
                 self.embed_dims_1,
                 self.embed_dims_1,
-                kernel_size=3,
-                padding=dw_dilation[1],
+                kernel_size=5,
+                padding=(2* dw_dilation[1]),
                 dilation=dw_dilation[1],
                 groups=self.embed_dims_1,
                 bias=True
@@ -179,8 +182,8 @@ class MultiOrderDWConv(nn.Module):
             self.DW_conv2 = nn.Conv3d(
                 self.embed_dims_2,
                 self.embed_dims_2,
-                kernel_size=3,
-                padding=dw_dilation[2],
+                kernel_size=7,
+                padding=(3* dw_dilation[2]),
                 dilation=dw_dilation[2],
                 groups=self.embed_dims_2,
                 bias=True
@@ -196,44 +199,62 @@ class MultiOrderDWConv(nn.Module):
 
     def forward(self, x):
 
+        # print("splits:", self.embed_dims_0, self.embed_dims_1, self.embed_dims_2)
+        # print("sum:", self.embed_dims_0 + self.embed_dims_1 + self.embed_dims_2)
+
         x0 = self.DW_conv0(x)
 
         outputs = []
 
         idx = 0
 
+        branch_feats = {}
+
         # split 0
         if self.embed_dims_0 > 0:
 
+            b0 = x0[:, idx:idx+self.embed_dims_0]
+
             outputs.append(
-                x0[:, idx:idx+self.embed_dims_0]
+                b0
             )
 
             idx += self.embed_dims_0
 
+            branch_feats["d1"] = b0
+
         # split 1
         if self.embed_dims_1 > 0:
 
+            b1 = x0[:, idx:idx+self.embed_dims_1]
             x1 = self.DW_conv1(
-                x0[:, idx:idx+self.embed_dims_1]
+                b1
             )
 
             outputs.append(x1)
 
             idx += self.embed_dims_1
 
+            branch_feats["d2"] = b1
+
         # split 2
         if self.embed_dims_2 > 0:
 
+            b2 = x0[:, idx:idx+self.embed_dims_2]
+
             x2 = self.DW_conv2(
-                x0[:, idx:idx+self.embed_dims_2]
+                b2
             )
 
             outputs.append(x2)
 
+            branch_feats["d3"] = b2
+
         x = torch.cat(outputs, dim=1)
 
         x = self.PW_conv(x)
+
+        self.branch_feats = branch_feats
 
         return x
 
@@ -380,6 +401,9 @@ class MogaBlock(nn.Module):
         )
 
     def forward(self, x):
+
+        # print("norm input shape:", x.shape)
+        # print("expected channels:", self.norm1.num_features)
 
         # spatial block
         identity = x

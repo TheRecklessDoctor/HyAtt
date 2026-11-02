@@ -24,41 +24,35 @@ class Model(nn.Module):
     
     def print_size(self, **kwargs):
         if kwargs["printS"]:
-            if "b" in kwargs:
-                print(f'{kwargs["section"]}: {kwargs["a"].shape}, {kwargs["b"].shape}')
-            else:
                 print(f'{kwargs["section"]}: {kwargs["a"].shape}')
     
     def forward(
             self, 
-            scan_a: List[torch.Tensor], 
-            scan_b: List[torch.Tensor]
+            scan: List[torch.Tensor]
     ) -> list[torch.Tensor]:
         
 
-        enc_a, enc_b  = self.encoder(
-            scan_a,
-            scan_b
+        enc_a = self.encoder(
+            scan,
         )
 
-        self.print_size(printS=self.printS, section="encoder", a=enc_a[-1], b=enc_b[-1])
+        self.print_size(printS=self.printS, section="encoder", a=enc_a[-1])
 
 
         latent = self.bottleneck(
-            enc_a, 
-            enc_b
+            enc_a
         )
 
         self.print_size(printS=self.printS, section="bottleneck", a=latent)
 
-        prediction, head2, head3 = self.decoder(
+        prediction = self.decoder(
             latent,
-            [enc_a, enc_b]
+            enc_a
         )
 
         self.print_size(printS=self.printS, section="decoder", a=prediction)
 
-        return [prediction, head2, head3]
+        return [prediction]
     
 
 

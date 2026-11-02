@@ -1,4 +1,3 @@
-
 global_vals:
   n_filters_out_ini: 16
   num_blocks_default: 3
@@ -6,118 +5,18 @@ global_vals:
 
 bottleneck:
   _target_: src.modelling.bottleneck.Bottleneck
-  in_channels: ${global_vals.n_filters_out_ini}
-  out_channels: [32, 16, 32]
   num_enc_blocks: ${global_vals.num_blocks_default}
-  stride: [1, 1, 1]
-  conv:
-    _partial_: true
-    _target_: src.modelling.bottleneck.conv_layer
-    normalisation: 
-      _partial_: True
-      _target_: "torch.nn.BatchNorm3d"
-      # num_features: 128
-    act: 
-      _target_: "torch.nn.GELU"
-      # inplace: True
-  depthwise:
-    _partial_: true
-    _target_: src.modelling.bottleneck.dwconv_layer
-    normalisation:
-      _partial_: True
-      _target_: "torch.nn.BatchNorm3d"
-      # num_features: 128
-    act:
-      _target_: "torch.nn.GELU"
-      #inplace: True
-  deconv:
-    _partial_: true
-    _target_: src.modelling.bottleneck.deconv_layer
-    normalisation: 
-      _target_: "torch.nn.BatchNorm3d"
-      num_features: 64
-    act: 
-      _target_: "torch.nn.GELU"
-      # inplace: True
   print_sizes: False
-  # normalisation:
-  #   _target_: "torch.nn.BatchNorm3d"
-  #   num_features: 128
-  # activation:
-  #   _target_: "torch.nn.SiLU"
-  
-
-
-# bridger_block:
-#   _partial_: True
-#   _target_: src.modelling.encoder.components.bridger.Bridger
-#   n_heads: 2
-#   dropout: 0.1
-#   act: 
-#     _target_: "torch.nn.GELU"
-#     # inplace: True
-
-bridger_block_single:
-  _partial_: True
-  _target_: src.modelling.encoder.components.bridger.SinglePathBridger
-  n_heads: 2
-  dropout: 0.1
-    # inplace: True
 
 dualEncoder:
   _target_: src.modelling.encoder.dual_encoder.DualEncoder
-  # bridger_at_stages: [0, 1, 2]
-  bridger_at_stages: []
   num_blocks: ${global_vals.num_blocks_default}
   n_filters_in_initial: 2
   n_filters_out_initial: ${global_vals.n_filters_out_ini}
-  initial_bridger_embedding: 32
-  initial_bridger_feedforward_embedding: 64
   print_sizes: [False, False, False]
-
-convolutional_block_dec:
-    _partial_: True
-    _target_: src.modelling.decoder.components.convolutional.ConvolutionalBlock
-    kernel_size: 3
-    padding: 1
-    normalisation:
-      _partial_: True
-      _target_: "torch.nn.BatchNorm3d"
-    act:
-      _target_: "torch.nn.GELU"
-      # inplace: True
-
-resnet_block_dec:
-    _partial_: True
-    _target_: src.modelling.decoder.components.convolutional.ResNetBlock
-    padding: 1
-    normalisation:
-      _partial_: True
-      _target_: "torch.nn.BatchNorm3d"
-    act:
-      _target_: "torch.nn.GELU"
-      # _target: "torch.nn.ReLU"
-      # inplace: False
-
-upsampling_block_dec:
-    _partial_: True
-    _target_: src.modelling.decoder.components.convolutional.UpsamplingBlock
-    stride: 2
-    output_padding: 0
-    padding: 0
-    normalisation:
-      _partial_: True
-      _target_: "torch.nn.BatchNorm3d"
-    act:
-      _target_: "torch.nn.GELU"
-      # _target: "torch.nn.ReLU"
-      # inplace: False
-    mode_upsampling: 0
 
 decoder:
   _target_: src.modelling.decoder.decoder.Decoder
-  conv_block: ${resnet_block_dec}
-  upsample_block: ${upsampling_block_dec}
   num_blocks: ${global_vals.num_blocks_default}
   n_filters_in: ${global_vals.n_filters_out_ini}
   n_filters_out: 16

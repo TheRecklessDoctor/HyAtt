@@ -1,30 +1,22 @@
-import torch
 from torch import nn
 from hydra.utils import instantiate
-from copy import deepcopy
 
 class ResNetBlock(nn.Module):
     def __init__(self,
                  n_filters_in: int,
                  n_filters_out: int,
                  padding:int,
-                 normalisation: nn.Module,
-                 act: nn.Module
                  ):
         super().__init__()
 
 
         self.conv_layer_1 = nn.Conv3d(n_filters_in, n_filters_out, 3, padding=padding)
-        self.norm_layer_1 = nn.BatchNorm3d(n_filters_out)
-        self.activation_1 = nn.ReLU(inplace=False)
+        self.norm_layer_1 = nn.InstanceNorm3d(n_filters_out)
+        self.activation_1 = nn.SiLU(inplace=False)
 
         self.conv_layer_2 = nn.Conv3d(n_filters_out, n_filters_out, 3, padding=padding)
-        self.norm_layer_2 = nn.BatchNorm3d(n_filters_out)
-        self.activation_2 = nn.ReLU(inplace=False)
-
-        # self.filter_mod = nn.Conv3d(n_filters_in, n_filters_out, 1)
-
-        # self.dropout = nn.Dropout(0.2, inplace=False)
+        self.norm_layer_2 = nn.InstanceNorm3d(n_filters_out)
+        self.activation_2 = nn.SiLU(inplace=False)
 
     def forward(self, x):
 
@@ -78,9 +70,7 @@ class UpsamplingBlock(nn.Module):
                  n_filters_out:int, 
                  stride:int, 
                  output_padding: int,
-                 padding:int,
-                 normalisation: nn.Module, 
-                 act:nn.Module, 
+                 padding:int, 
                  mode_upsampling:int):
         super().__init__()
 
@@ -109,15 +99,61 @@ class UpsamplingBlock(nn.Module):
             return x
 
 
-class ConvUp(nn.Module):
-    def __init__(self, conv_cfg, up_cfg):
+class UpSamplingMedNext(nn.Module):
+    def __init__(
+            self,
+            n_filters_in: int,
+            n_filters_out: int
+    ):
         super().__init__()
 
-        self.conv = instantiate(conv_cfg)
-        self.up = instantiate(up_cfg)
+        self.res_conv = nn.ConvTranspose3d(
+            in_channels = n_filters_in, 
+            out_channels = n_filters_out, 
+            kernel_size=1, 
+            stride=2, 
+            padding=0
+        )
+
+        self.conv1 = nn.ConvTranspose3d(
+            in_channels=n_filters_in,
+            out_channels = n_filters_in,
+            kernel_size=3,
+            padding=1,
+            stride=2,
+            groups=n_filters_in
+        )
+
+        self.norm1 = nn.InstanceNorm3d(n_filters_in)
+        self.act = nn.SiLU(inplace=False)
+
+        self.expansion = nn.Conv3d(
+            in_channels = n_filters_in,
+            out_channels = n_filters_in * 4,
+            kernel_size=1,
+            padding=0,
+            stride=1
+        )
+
+        self.contraction = nn.Conv3d(
+            in_channels = n_filters_in * 4,
+            out_channels = n_filters_out,
+            kernel_size=1,
+            stride=1,
+            padding=0
+        )
     
     def forward(self, x):
-        x = self.conv(x)
-        x = self.up(x)
-        
-        return x
+
+        identity = x
+
+        x1 = self.conv1(x)
+        x1 = self.act(self.expansion(self.norm1(x1)))
+        x1 = self.contraction(x1)
+
+        x1 = nn.functional.pad(x1, (1,0,1,0,1,0))
+
+        res = self.res_conv(identity)
+        res = nn.functional.pad(res, (1,0,1,0,1,0))
+
+        return x1 + res
